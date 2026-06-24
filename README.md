@@ -23,10 +23,4 @@ Diseñar una solución de Data Warehouse que permita identificar pérdidas econ�
 - Dashboard para visualización de resultados.
 - Análisis de pérdidas por sucursal, categoría y producto.
 
-  ## Modelo Dimensional
 
-![Modelo Dimensional](Modelo-Estrella.png)
-
-## Dashboard
-
-![Dashboard](Dashboard-1.png)
