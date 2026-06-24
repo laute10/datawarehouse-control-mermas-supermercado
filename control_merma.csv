@@ -1,0 +1,15 @@
+ID_Reporte;Fecha_Registro;Sucursal_Origen;Producto_Nombre;Categoria_Producto;Causa_Merma;Cantidad_Unidades;Costo_Unitario_Raw;Monto_Costo_Total_Raw;Monto_Venta_Total_Raw;Operario_Auditor
+1;10/4/2026;Sucursal Centro - Av. San Martín 1240;Asado de Tira Novillito 1kg;Carnicería;Rotura en depósito;8;6889,98;55119,84;79403,36;AUDITOR INTERNO
+2;14/5/2026;Sucursal Palmares - Panamericana 2750;Jamón Cocido Bocatti 1kg;Fiambrería y Quesos;Rotura en depósito;10;3153,61;31536,1;44368,7;auditor interno
+3;21/3/2026;Sucursal Palmares - Panamericana 2750;Asado de Tira Novillito 1kg;Carnicería;Robo hormiga;2;6889,98;13779,96;19850,84;Auditor Interno
+4;2026.03.02;Sucursal Quinta Sección - Arístides 320;Detergente Sintético Ala Limón 750ml;Limpieza;Robo hormiga;1;4042,74;4042,74;5678,93;Auditor Interno
+5;1/3/2026;sucursal villanueva - acceso este 4100;Milanesa de Carne Preparada 1kg;Carnicería;Vencimiento en góndola;25;5014,14;125353,5;179607,25;auditor interno
+6;2026.05.21;sucursal palmares - panamericana 2750;Mortadela con Pistacho Paladini 1kg;Fiambrería y Quesos;Robo hormiga;1;5871,41;5871,41;8609,83;Auditor Interno
+7;9/4/2026;Sucursal Centro - Av. San Martín 1240;Manteca Primer Premio 200g;Lácteos y Frescos;Robo hormiga;1;3598,04;3598,04;5234,14;AUDITOR INTERNO
+8;2026.03.17;Sucursal Centro - Av. San Martín 1240;Yerba Mate Playadito 1kg;Almacén;Robo hormiga;3;1237,28;3711,84;5292,33;AUDITOR INTERNO
+9;2026.05.25;Sucursal Palmares - Panamericana 2750;Desodorante de Ambientes Poett 360ml;Limpieza;Robo hormiga;2;4092,14;8184,28;11796,58;Auditor Interno
+10;2026.03.30;Sucursal Centro - Av. San Martín 1240;Limpiador de Pisos Procenex 1L;Limpieza;Vencimiento en góndola;2;2184,55;$ 4.369,10;$ 6.376,14;auditor interno
+11;14/5/2026;sucursal villanueva - acceso este 4100;Puré de Tomate Alco 520g;Almacén;Vencimiento en góndola;15;2584,36;$ 38.765,40;$ 52.838,85;auditor interno
+12;12/4/2026;Sucursal Quinta Sección - Arístides 320;Leche Entera La Serenísima 1L;Lácteos y Frescos;Rotura en depósito;5;1783,37;NULL;NULL;Auditor Interno
+13;2026.03.19;Sucursal Palmares - Panamericana 2750;Pechuga de Pollo Fresca 1kg;Carnicería;Robo hormiga;2;5644,91;11289,82;16889,2;Auditor Interno
+14;4/5/2026;Sucursal Centro - Av. San Martín 1240;Queso Tybo Barra Barraza 1kg;Fiambrería y Quesos;Vencimiento en góndola;4;6458,09;25832,36;37353,6;AUDITOR INTERNO
