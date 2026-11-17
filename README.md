@@ -33,15 +33,16 @@ Los datos de origen ([`control_merma.csv`](control_merma.csv), exportado de la p
 | Problema en el origen | Ejemplo | Solución en SQL |
 |---|---|---|
 | Nombres escritos de distintas formas | `Sucursal Centro`, `sucursal centro` | `UPPER()` y `SUBSTRING_INDEX()` para unificar y cruzar con las dimensiones |
-| Fechas en formatos mezclados | `10/4/2026`, `2026.03.02` | `CASE` con `REGEXP` que detecta cada formato y lo convierte con `STR_TO_DATE()` |
-| Montos guardados como texto | `$ 4.369,10` | Limpieza de `$` y espacios con `REPLACE()` y conversión con `CAST()` a `DECIMAL` |
-| Registros incompletos | costo en `NULL` | Se descartan antes de llegar a la tabla de hechos |
+| Fechas en formatos mezclados | `10/4/2026`, `1/3/2026`, `2026.03.02` | `CASE` con `REGEXP` que detecta cada formato (con días y meses de 1 o 2 dígitos) y lo convierte con `STR_TO_DATE()` |
+| Montos en formato argentino guardados como texto | `$ 4.369,10`, `55119,84` | `REPLACE()` quita el `$`, los espacios y el punto de miles, y pasa la coma decimal a punto; después `CAST()` a `DECIMAL` |
+| Registros incompletos | costo en `NULL` | No entran a la tabla de hechos y se listan en un reporte de errores para corregirlos a mano |
+| Archivo exportado de Excel en Windows | tildes en Latin-1 | `LOAD DATA … CHARACTER SET latin1` para que los nombres con tilde coincidan con las dimensiones |
 
 El flujo es:
 
 1. **Extracción:** el CSV se carga tal cual en una tabla de *staging* (`Mermas_Staging_Raw`) con todas las columnas como texto, para que ningún dato sucio frene la importación.
 2. **Transformación y carga:** un `INSERT … SELECT` limpia cada columna, la cruza con las dimensiones y calcula el margen perdido (`venta − costo`).
-3. **Control:** se eliminan los registros sin costo y se verifican la cantidad de filas cargadas y el costo total.
+3. **Control de calidad:** se listan los registros rechazados, se verifica que ninguna merma haya quedado sin fecha y se muestran la cantidad de filas cargadas y el costo total.
 
 Todo está en [`Control de mermas.sql`](Control%20de%20mermas.sql).
 
@@ -71,9 +72,10 @@ En el [informe completo](Business%20Intelligence%20Aplicado%20a%20la%20Gesti%C3%
 
 **Requisitos:** MySQL 8 y MySQL Workbench (o cualquier cliente de MySQL).
 
-1. Copiá `control_merma.csv` a la carpeta desde la que MySQL permite importar archivos. En Windows suele ser `C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/`. Para confirmarla, ejecutá `SHOW VARIABLES LIKE 'secure_file_priv';`.
-2. Renombrá la copia a `control_mermas.csv`, que es el nombre que usa el script (o cambiá la ruta en la sección 6 del script).
-3. Ejecutá `Control de mermas.sql` completo. El script borra y vuelve a crear la base `dw_supermercado_mermas`, carga las dimensiones, importa el CSV, corre el ETL y muestra al final la cantidad de registros cargados y el costo total.
+1. Copiá `control_merma.csv` a la carpeta desde la que MySQL permite importar archivos. En Windows suele ser `C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/`. Para confirmarla, ejecutá `SHOW VARIABLES LIKE 'secure_file_priv';`. Si tu carpeta es otra, cambiá la ruta en la sección 6 del script.
+2. Ejecutá `Control de mermas.sql` completo. El script borra y vuelve a crear la base `dw_supermercado_mermas`, carga las dimensiones, importa el CSV, corre el ETL y muestra los controles de calidad.
+
+**Resultado esperado:** de los 14 registros del CSV entran **13** a la tabla de hechos, con un costo total de mermas de **$ 331.454,39**. El registro 12 queda afuera porque no tiene montos cargados, y aparece en el reporte de errores para corregirlo a mano. El control de fechas tiene que dar 0.
 
 Los datos son **ficticios** y forman una muestra chica (14 registros) pensada para probar cada regla de limpieza.
 
