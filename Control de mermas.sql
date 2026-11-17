@@ -141,69 +141,97 @@ INSERT IGNORE INTO Dim_Tiempo VALUES
 (20260504, '2026-05-04', 2026, 5, 'Mayo', 4, 'T2');
 
 -- ============================================================================
--- 6. IMPORTACIÓN REAL DEL CSV (Tu sintaxis y tu nuevo nombre)
+-- 6. IMPORTACIÓN DEL CSV A LA TABLA DE STAGING
 -- ============================================================================
-SET GLOBAL local_infile = 1;
-SHOW VARIABLES LIKE 'local_infile';
-SELECT VERSION();
-
-LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/control_mermas.csv'
+-- El archivo tiene que estar en la carpeta desde la que MySQL permite importar.
+-- Para ver cuál es: SHOW VARIABLES LIKE 'secure_file_priv';
+-- El CSV está guardado en Latin-1 (ISO-8859-1), como lo exporta Excel en
+-- Windows, y con fin de línea de Windows (\r\n). Si no se indica, las tildes
+-- se rompen y los nombres no coinciden con las dimensiones.
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/control_merma.csv'
 INTO TABLE Mermas_Staging_Raw
+CHARACTER SET latin1
 FIELDS TERMINATED BY ';'
-LINES TERMINATED BY '\n'
+LINES TERMINATED BY '\r\n'
 IGNORE 1 ROWS;
--- ============================================================================
--- 7. PIPELINE ETL HACIA EL DATA WAREHOUSE (Tu lógica de REGEXP y CAST)
--- ============================================================================
-INSERT INTO Hechos_Mermas (ID_Fecha, ID_Producto, ID_Sucursal, ID_Tipo_Perdida, Cantidad_Perdida, Monto_Perdida_Costo, Monto_Perdida_Venta, Margen_Financiero_Perdido)
-SELECT 
-    -- Tu lógica exacta de CASE con REGEXP para estandarizar las fechas del Excel
-    CAST(DATE_FORMAT(
-        CASE
-            -- YYYY/MM/DD
-            WHEN s.Fecha_Registro REGEXP '^[0-9]{4}/' 
-                THEN STR_TO_DATE(s.Fecha_Registro, '%Y/%m/%d')
-            -- DD/MM/YYYY
-            WHEN s.Fecha_Registro REGEXP '^[0-9]{2}/' 
-                THEN STR_TO_DATE(s.Fecha_Registro, '%d/%m/%Y')
-            -- YYYY.MM.DD
-            WHEN s.Fecha_Registro LIKE '%.%' 
-                THEN STR_TO_DATE(s.Fecha_Registro, '%Y.%m.%d')
-            -- YYYY-MM-DD
-            WHEN s.Fecha_Registro REGEXP '^[0-9]{4}-' 
-                THEN STR_TO_DATE(s.Fecha_Registro, '%Y-%m-%d')
-            -- DD-MM-YYYY
-            WHEN s.Fecha_Registro REGEXP '^[0-9]{2}-' 
-                THEN STR_TO_DATE(s.Fecha_Registro, '%d-%m-%Y')
-            ELSE NULL
-        END, '%Y%m%d') AS UNSIGNED) AS ID_Fecha,
 
+-- ============================================================================
+-- 7. PIPELINE ETL HACIA EL DATA WAREHOUSE
+-- ============================================================================
+-- Primero se limpia cada fila en una subconsulta (l) y después se cruza con
+-- las dimensiones. Las filas sin costo no pasan: quedan para revisar a mano
+-- (ver la sección 8).
+INSERT INTO Hechos_Mermas (ID_Fecha, ID_Producto, ID_Sucursal, ID_Tipo_Perdida, Cantidad_Perdida, Monto_Perdida_Costo, Monto_Perdida_Venta, Margen_Financiero_Perdido)
+SELECT
+    l.ID_Fecha,
     p.ID_Producto,
     suc.ID_Sucursal,
     tp.ID_Tipo_Perdida,
-    s.Cantidad_Unidades,
-    
-    -- Limpieza quirúrgica de caracteres monetarios ($) y pasaje a tipo DECIMAL
-    CAST(REPLACE(REPLACE(s.Monto_Costo_Total_Raw, '$', ''), ' ', '') AS DECIMAL(10,2)) AS Monto_Perdida_Costo,
-    CAST(REPLACE(REPLACE(s.Monto_Venta_Total_Raw, '$', ''), ' ', '') AS DECIMAL(10,2)) AS Monto_Perdida_Venta,
-    
-    -- Métrica calculada en caliente (Venta - Costo)
-    (CAST(REPLACE(REPLACE(s.Monto_Venta_Total_Raw, '$', ''), ' ', '') AS DECIMAL(10,2)) - 
-     CAST(REPLACE(REPLACE(s.Monto_Costo_Total_Raw, '$', ''), ' ', '') AS DECIMAL(10,2))) AS Margen_Financiero_Perdido
+    l.Cantidad_Unidades,
+    l.Costo_Total,
+    l.Venta_Total,
+    -- Métrica calculada: lo que se dejó de ganar (venta - costo)
+    l.Venta_Total - l.Costo_Total AS Margen_Financiero_Perdido
+FROM (
+    SELECT
+        s.*,
 
-FROM Mermas_Staging_Raw s
-INNER JOIN Dim_Producto p ON UPPER(s.Producto_Nombre) = p.Nombre_Producto
-INNER JOIN Dim_Sucursal suc ON UPPER(SUBSTRING_INDEX(s.Sucursal_Origen, ' -', 1)) = suc.Nombre_Sucursal
-INNER JOIN Dim_Tipo_Perdida tp ON s.Causa_Merma = tp.Causa_Merma
-WHERE s.Monto_Costo_Total_Raw IS NOT NULL 
-  AND s.Monto_Costo_Total_Raw <> 'NULL' 
-  AND s.Monto_Costo_Total_Raw <> '';
+        -- Fechas: CASE con REGEXP que detecta cada formato del Excel y lo
+        -- convierte con STR_TO_DATE. Acepta días y meses de 1 o 2 dígitos
+        -- (10/4/2026 y 1/3/2026) y genera la clave AAAAMMDD de Dim_Tiempo.
+        CAST(DATE_FORMAT(
+            CASE
+                -- AAAA/MM/DD
+                WHEN s.Fecha_Registro REGEXP '^[0-9]{4}/[0-9]{1,2}/[0-9]{1,2}$'
+                    THEN STR_TO_DATE(s.Fecha_Registro, '%Y/%m/%d')
+                -- DD/MM/AAAA
+                WHEN s.Fecha_Registro REGEXP '^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$'
+                    THEN STR_TO_DATE(s.Fecha_Registro, '%d/%m/%Y')
+                -- AAAA.MM.DD
+                WHEN s.Fecha_Registro REGEXP '^[0-9]{4}[.][0-9]{1,2}[.][0-9]{1,2}$'
+                    THEN STR_TO_DATE(s.Fecha_Registro, '%Y.%m.%d')
+                -- AAAA-MM-DD
+                WHEN s.Fecha_Registro REGEXP '^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$'
+                    THEN STR_TO_DATE(s.Fecha_Registro, '%Y-%m-%d')
+                -- DD-MM-AAAA
+                WHEN s.Fecha_Registro REGEXP '^[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}$'
+                    THEN STR_TO_DATE(s.Fecha_Registro, '%d-%m-%Y')
+                ELSE NULL
+            END, '%Y%m%d') AS UNSIGNED) AS ID_Fecha,
+
+        -- Montos en formato argentino ("$ 4.369,10" o "55119,84"):
+        -- 1) se quitan el signo $ y los espacios,
+        -- 2) se quita el punto de los miles,
+        -- 3) la coma decimal pasa a punto, y recién ahí se convierte a DECIMAL.
+        CAST(REPLACE(REPLACE(REPLACE(REPLACE(s.Monto_Costo_Total_Raw,
+            '$', ''), ' ', ''), '.', ''), ',', '.') AS DECIMAL(12,2)) AS Costo_Total,
+        CAST(REPLACE(REPLACE(REPLACE(REPLACE(s.Monto_Venta_Total_Raw,
+            '$', ''), ' ', ''), '.', ''), ',', '.') AS DECIMAL(12,2)) AS Venta_Total
+
+    FROM Mermas_Staging_Raw s
+    -- Control de vacíos: sin costo o sin venta no entra a la tabla de hechos
+    WHERE s.Monto_Costo_Total_Raw IS NOT NULL
+      AND TRIM(s.Monto_Costo_Total_Raw) NOT IN ('', 'NULL')
+      AND s.Monto_Venta_Total_Raw IS NOT NULL
+      AND TRIM(s.Monto_Venta_Total_Raw) NOT IN ('', 'NULL')
+) l
+-- Texto unificado: todo en MAYÚSCULAS para que coincida con las dimensiones
+INNER JOIN Dim_Producto p ON UPPER(l.Producto_Nombre) = p.Nombre_Producto
+INNER JOIN Dim_Sucursal suc ON UPPER(SUBSTRING_INDEX(l.Sucursal_Origen, ' -', 1)) = suc.Nombre_Sucursal
+INNER JOIN Dim_Tipo_Perdida tp ON l.Causa_Merma = tp.Causa_Merma;
 
 -- ============================================================================
--- 8. DEPURACIÓN DE REGISTROS INVÁLIDOS (Igual que en tu TP)
+-- 8. CONTROL DE CALIDAD
 -- ============================================================================
-DELETE FROM Hechos_Mermas
-WHERE Monto_Perdida_Costo IS NULL OR Monto_Perdida_Costo = 0;
+-- Registros que no entraron al Data Warehouse por no tener montos cargados
+-- (reporte de errores para corregir a mano en el origen)
+SELECT ID_Reporte, Fecha_Registro, Sucursal_Origen, Producto_Nombre
+FROM Mermas_Staging_Raw
+WHERE Monto_Costo_Total_Raw IS NULL OR TRIM(Monto_Costo_Total_Raw) IN ('', 'NULL')
+   OR Monto_Venta_Total_Raw IS NULL OR TRIM(Monto_Venta_Total_Raw) IN ('', 'NULL');
+
+-- Tienen que dar 0: mermas con una fecha que no se pudo leer o que falta en Dim_Tiempo
+SELECT COUNT(*) AS mermas_sin_fecha FROM Hechos_Mermas WHERE ID_Fecha IS NULL;
 
 -- ============================================================================
 -- 9. COMPROBACIONES FINALES EN PANTALLA
@@ -211,7 +239,3 @@ WHERE Monto_Perdida_Costo IS NULL OR Monto_Perdida_Costo = 0;
 SELECT COUNT(*) AS total_registros_cargados FROM Hechos_Mermas;
 SELECT SUM(Monto_Perdida_Costo) AS costo_total_merma_empresa FROM Hechos_Mermas;
 SELECT * FROM Hechos_Mermas;
-
-SELECT * FROM Mermas_Staging_Raw;
-
-SELECT * FROM Hechos_Mermas LIMIT 10;
